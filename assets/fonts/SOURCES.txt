@@ -1,0 +1,31 @@
+Bundled reader fonts (unmodified TrueType files)
+
+Official Google Fonts distribution: https://github.com/google/fonts
+Downloaded 2026-10-28. No fonts are fetched at application runtime.
+Each family includes regular, italic, bold, and bold italic faces.
+Flutter uses local family aliases ReaderSerif, ReaderSans, ReaderMono; the
+font files themselves and their internal family names are unmodified.
+
+PT Serif — ParaType
+https://github.com/google/fonts/tree/main/ofl/ptserif
+Files: PT_Serif-Web-Regular.ttf, PT_Serif-Web-Italic.ttf,
+PT_Serif-Web-Bold.ttf, PT_Serif-Web-BoldItalic.ttf
+Complete copyright, reserved-name notices and SIL Open Font License:
+PT_Serif-Web-OFL.txt (copied unmodified from ofl/ptserif/OFL.txt).
+
+PT Sans — ParaType
+https://github.com/google/fonts/tree/main/ofl/ptsans
+Files: PT_Sans-Web-Regular.ttf, PT_Sans-Web-Italic.ttf,
+PT_Sans-Web-Bold.ttf, PT_Sans-Web-BoldItalic.ttf
+Complete copyright, reserved-name notices and SIL Open Font License:
+PT_Sans-Web-OFL.txt (copied unmodified from ofl/ptsans/OFL.txt).
+
+IBM Plex Mono — IBM
+https://github.com/google/fonts/tree/main/ofl/ibmplexmono
+Files: IBMPlexMono-Regular.ttf, IBMPlexMono-Italic.ttf,
+IBMPlexMono-Bold.ttf, IBMPlexMono-BoldItalic.ttf
+Complete copyright, reserved-name notices and SIL Open Font License:
+IBMPlexMono-OFL.txt (copied unmodified from ofl/ibmplexmono/OFL.txt).
+
+All source files were retrieved from the corresponding directory at:
+https://raw.githubusercontent.com/google/fonts/main/ofl/

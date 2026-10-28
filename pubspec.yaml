@@ -1,0 +1,62 @@
+name: audiosubs_reader
+description: "An ebook-first audiobook reader with desktop preparation and Android playback."
+publish_to: 'none'
+version: 0.2.0+2
+
+environment:
+  sdk: ^3.13.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+  audioplayers: ^6.8.1
+  file_picker: ^12.2.0
+  path_provider: ^2.1.6
+  path: ^1.9.1
+  archive: ^4.5.2
+  scrollable_positioned_list: ^0.3.8
+  crypto: ^3.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/fonts/PT_Serif-Web-OFL.txt
+    - assets/fonts/PT_Sans-Web-OFL.txt
+    - assets/fonts/IBMPlexMono-OFL.txt
+    - assets/fonts/SOURCES.txt
+  fonts:
+    - family: ReaderSerif
+      fonts:
+        - asset: assets/fonts/PT_Serif-Web-Regular.ttf
+        - asset: assets/fonts/PT_Serif-Web-Italic.ttf
+          style: italic
+        - asset: assets/fonts/PT_Serif-Web-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/PT_Serif-Web-BoldItalic.ttf
+          weight: 700
+          style: italic
+    - family: ReaderSans
+      fonts:
+        - asset: assets/fonts/PT_Sans-Web-Regular.ttf
+        - asset: assets/fonts/PT_Sans-Web-Italic.ttf
+          style: italic
+        - asset: assets/fonts/PT_Sans-Web-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/PT_Sans-Web-BoldItalic.ttf
+          weight: 700
+          style: italic
+    - family: ReaderMono
+      fonts:
+        - asset: assets/fonts/IBMPlexMono-Regular.ttf
+        - asset: assets/fonts/IBMPlexMono-Italic.ttf
+          style: italic
+        - asset: assets/fonts/IBMPlexMono-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/IBMPlexMono-BoldItalic.ttf
+          weight: 700
+          style: italic

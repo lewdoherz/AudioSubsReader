@@ -1,0 +1,5 @@
+# Optional Windows GPU runtime; NVIDIA proprietary component licences apply.
+# Kept separate so CPU-only builds do not acquire these large native packages.
+nvidia-cublas-cu12==12.9.2.10
+nvidia-cudnn-cu12==9.25.1.1
+nvidia-cuda-nvrtc-cu12==12.9.86
