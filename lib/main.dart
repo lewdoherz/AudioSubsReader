@@ -198,7 +198,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
           onPressed: () => showLicensePage(
             context: context,
             applicationName: 'AudioSubs Reader',
-            applicationVersion: '0.2.0',
+            applicationVersion: '0.3.0',
           ),
           icon: const Icon(Icons.info_outline),
         ),

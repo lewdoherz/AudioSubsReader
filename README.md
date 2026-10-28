@@ -32,6 +32,17 @@ Open **Appearance** from the library or reader toolbar. Changes apply immediatel
 
 These are audiobook positions and recorded durations, not accumulated listening statistics or speed-adjusted estimates. If any track duration is unknown, the whole-book total is explicitly unavailable rather than an incorrect partial sum.
 
+## Fullscreen reading
+
+In a reading book, open **More reader options** (`⋮`) → **Fullscreen**. The book fills the display with navigation, track details and playback controls hidden. Audio, highlighting and following continue normally.
+
+- Click or tap the page to reveal controls temporarily. They hide again after about four seconds; revealing them does not resize or reposition the book viewport.
+- Menus, dialogs, active control gestures, keyboard focus and text selection keep revealed controls available while you use them. Accessible-navigation mode keeps controls visible instead of hiding essential actions.
+- **Windows:** **F11** toggles fullscreen and **Escape** exits it. The native window fills its current monitor without a title bar and restores its previous normal or maximized presentation on exit.
+- **Android:** **Back** first leaves fullscreen without closing the book. Swipe from a screen edge to reveal Android's system bars temporarily.
+
+Fullscreen is a reader-session mode, not a saved appearance setting. After leaving it, ordinary Back closes the reader and saves progress as before. Manual scrolling and paused playback remain unchanged when entering, revealing controls, or leaving fullscreen.
+
 ## Build and run
 
 Prerequisites: Flutter/Dart compatible with `pubspec.yaml`; Visual Studio C++ desktop tools for Windows; Python **3.12 x64** for preparation development/packaging; Android SDK/JDK for Android builds. The LGPL FFmpeg/PyAV builder downloads checksum-pinned MSYS2/build inputs into this project's ignored build cache; a stock GPL-enabled PyAV wheel is not substituted.
@@ -145,6 +156,8 @@ Runtime verification used real two-track narrated WAV audio and an EPUB with inl
 The v0.2.0 native runs additionally exercised live dark mode, serif font/size changes, custom highlight-color validation and underlining, visible-word following after those changes, whole-book clocks, paused cross-file seeking/skipping, switching to a file-local clock, and persisted appearance/playback speed. The displayed reader and Appearance dialog/sheet were visually checked on both platforms.
 
 Native completion/replay checks on both platforms verified that the completed book clock remains at its final endpoint despite late decoder position resets, and that replay and subsequent cross-file seeking receive position updates normally.
+
+The v0.3.0 native runs exercised fullscreen while narration was playing, text-only rendering, unchanged book viewport during control reveal/hide, mouse/touch auto-hide, dialog hold/release, and manual-scroll/paused-state preservation. Windows checks compared real monitor/window rectangles and styles and verified exact normal-window and maximized restoration. Android checked native system-bar transitions and Back leaving fullscreen before normal reader close. Widget regressions cover display errors, first-Back behavior, stable overlays and accessible-navigation controls. Physical ARM64 devices and monitor/DPI topology changes were not exercised.
 
 Windows preparation was also exercised through native EPUB, multi-audio and output-folder dialogs, invoking its bundled worker and importing the result. An Android release APK was separately exercised with the real document provider and observed playing highlighted text after automatic track advancement. Disposable fixtures and UI-driving scripts are not shipped. Permanent tests cover package safety, alignment ambiguities/omissions, Unicode ranges, formatting, contrast, atomic preference persistence, highlight boundaries and whole-book timeline boundaries.
 

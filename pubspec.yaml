@@ -1,7 +1,7 @@
 name: audiosubs_reader
 description: "An ebook-first audiobook reader with desktop preparation and Android playback."
 publish_to: 'none'
-version: 0.2.0+2
+version: 0.3.0+3
 
 environment:
   sdk: ^3.13.2

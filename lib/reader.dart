@@ -6,11 +6,13 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart'
     show ScrollDirection, RenderParagraph, RenderAbstractViewport;
+import 'package:flutter/services.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 import 'appearance.dart';
 import 'appearance_panel.dart';
 import 'book.dart';
+import 'reader_display.dart';
 import 'timeline.dart';
 
 /// Expands only the visual range. The package's word timing remains unchanged.
@@ -95,6 +97,25 @@ class _ReaderScreenState extends State<ReaderScreen>
   Future<void> _audioQueue = Future<void>.value();
   Future<void> _saveQueue = Future<void>.value();
   Timer? _saveTimer;
+  Timer? _controlsTimer;
+  Timer? _fullscreenHintTimer;
+  final FocusNode _toolbarFocus = FocusNode(debugLabel: 'Reader toolbar');
+  final FocusNode _playbackFocus = FocusNode(debugLabel: 'Reader playback');
+  final Set<int> _controlPointers = {};
+  Future<void> _displayQueue = Future<void>.value();
+  bool _fullscreen = false;
+  bool _fullscreenChanging = false;
+  bool _displayNeedsRestore = false;
+  bool _controlsVisible = true;
+  bool _fullscreenHint = false;
+  bool _accessibleNavigation = false;
+  bool _hasSelection = false;
+  int _controlHolds = 0;
+  int? _pagePointer;
+  Offset? _pagePointerOrigin;
+  Duration? _pagePointerTime;
+  Size? _viewportSize;
+  String? _fullscreenError;
   int _track = 0;
   int _positionMs = 0;
   int? _dragMs;
@@ -126,6 +147,191 @@ class _ReaderScreenState extends State<ReaderScreen>
       for (var i = 0; i < _book.tracks.length; i++)
         _durations[i] ?? _book.tracks[i].durationMs,
     ]);
+  }
+
+  bool get _controlsBusy =>
+      _controlHolds > 0 ||
+      _controlPointers.isNotEmpty ||
+      _toolbarFocus.hasFocus ||
+      _playbackFocus.hasFocus ||
+      _hasSelection;
+
+  void _scheduleControlsHide() {
+    _controlsTimer?.cancel();
+    if (_disposed) return;
+    if (!_fullscreen ||
+        !_controlsVisible ||
+        _fullscreenChanging ||
+        _accessibleNavigation ||
+        _controlsBusy) {
+      return;
+    }
+    _controlsTimer = Timer(const Duration(seconds: 4), () {
+      if (!mounted ||
+          _disposed ||
+          !_fullscreen ||
+          _fullscreenChanging ||
+          _accessibleNavigation ||
+          _controlsBusy) {
+        return;
+      }
+      setState(() => _controlsVisible = false);
+    });
+  }
+
+  void _revealControls() {
+    if (!_fullscreen || _disposed) return;
+    _fullscreenHintTimer?.cancel();
+    if (!_controlsVisible || _fullscreenHint) {
+      setState(() {
+        _controlsVisible = true;
+        _fullscreenHint = false;
+      });
+    }
+    _scheduleControlsHide();
+  }
+
+  void _holdControls() {
+    _controlHolds++;
+    _controlsTimer?.cancel();
+  }
+
+  void _releaseControls() {
+    if (_controlHolds > 0) _controlHolds--;
+    _scheduleControlsHide();
+  }
+
+  Future<void> _withControls(Future<void> Function() action) async {
+    if (_disposed) return;
+    _holdControls();
+    try {
+      await action();
+    } finally {
+      _releaseControls();
+    }
+  }
+
+  Widget _controlRegion(FocusNode focus, Widget child) => Focus(
+    focusNode: focus,
+    canRequestFocus: false,
+    descendantsAreFocusable: !_fullscreen || _controlsVisible,
+    onFocusChange: (_) => _scheduleControlsHide(),
+    child: Listener(
+      onPointerDown: (event) {
+        _controlPointers.add(event.pointer);
+        _controlsTimer?.cancel();
+      },
+      onPointerUp: (event) {
+        _controlPointers.remove(event.pointer);
+        _scheduleControlsHide();
+      },
+      onPointerCancel: (event) {
+        _controlPointers.remove(event.pointer);
+        _scheduleControlsHide();
+      },
+      child: child,
+    ),
+  );
+
+  bool _handleReaderKey(KeyEvent event) {
+    if (_disposed ||
+        event is! KeyDownEvent ||
+        !(ModalRoute.of(context)?.isCurrent ?? false)) {
+      return false;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.f11) {
+      if (!_fullscreenChanging) unawaited(_setFullscreen(!_fullscreen));
+      return true;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.escape &&
+        (_fullscreen || _fullscreenChanging)) {
+      unawaited(_back());
+      return true;
+    }
+    return false;
+  }
+
+  Future<void> _setFullscreen(bool enabled) async {
+    if (_disposed || _closing) return;
+    if (_fullscreenChanging) {
+      await _displayQueue;
+      if (_disposed || !mounted) return;
+      return _setFullscreen(enabled);
+    }
+    if (_fullscreen == enabled && (enabled || !_displayNeedsRestore)) return;
+    _controlsTimer?.cancel();
+    setState(() => _fullscreenChanging = true);
+    _displayQueue = _changeFullscreen(enabled);
+    await _displayQueue;
+  }
+
+  Future<void> _changeFullscreen(bool enabled) async {
+    try {
+      if (enabled) _displayNeedsRestore = true;
+      await ReaderDisplay.setFullscreen(enabled);
+      _displayNeedsRestore = enabled;
+      if (_disposed || !mounted) return;
+      _fullscreenHintTimer?.cancel();
+      if (enabled) {
+        _toolbarFocus.unfocus();
+        _playbackFocus.unfocus();
+      }
+      setState(() {
+        _fullscreen = enabled;
+        _controlsVisible = !enabled || _accessibleNavigation;
+        _fullscreenHint = enabled && !_accessibleNavigation;
+        _fullscreenError = null;
+      });
+      if (_fullscreenHint) {
+        _fullscreenHintTimer = Timer(const Duration(seconds: 5), () {
+          if (mounted && !_disposed) {
+            setState(() => _fullscreenHint = false);
+          }
+        });
+      }
+    } catch (error) {
+      if (_disposed || !mounted) {
+        debugPrint('Restoring reader display: $error');
+        return;
+      }
+      setState(() {
+        _fullscreenError =
+            '${enabled ? 'Entering' : 'Leaving'} fullscreen: $error';
+        _controlsVisible = true;
+      });
+    } finally {
+      if (mounted && !_disposed) {
+        setState(() => _fullscreenChanging = false);
+        _scheduleControlsHide();
+      }
+    }
+  }
+
+  Future<void> _back() async {
+    if (_fullscreenChanging) {
+      await _displayQueue;
+      if (_disposed || !mounted) return;
+      if (_fullscreen) await _setFullscreen(false);
+      return;
+    }
+    if (_fullscreen) {
+      await _setFullscreen(false);
+      return;
+    }
+    await _close();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final accessible = MediaQuery.of(context).accessibleNavigation;
+    if (accessible && !_accessibleNavigation && _fullscreen) {
+      _controlsVisible = true;
+      _fullscreenHint = false;
+      _fullscreenHintTimer?.cancel();
+    }
+    _accessibleNavigation = accessible;
+    _scheduleControlsHide();
   }
 
   void _appearanceChanged() {
@@ -162,6 +368,7 @@ class _ReaderScreenState extends State<ReaderScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    HardwareKeyboard.instance.addHandler(_handleReaderKey);
     _preferences = widget.appearance.value;
     widget.appearance.addListener(_appearanceChanged);
     _rebuildTimeline();
@@ -478,6 +685,10 @@ class _ReaderScreenState extends State<ReaderScreen>
 
   Future<void> _close() async {
     if (_closing) return;
+    if (_displayNeedsRestore) {
+      await _setFullscreen(false);
+      if (_disposed || !mounted || _displayNeedsRestore) return;
+    }
     setState(() => _closing = true);
     await _runAudio(() async {
       if (_ready) await _player.pause();
@@ -744,8 +955,23 @@ class _ReaderScreenState extends State<ReaderScreen>
     _disposed = true;
     _acceptEvents = false;
     WidgetsBinding.instance.removeObserver(this);
+    HardwareKeyboard.instance.removeHandler(_handleReaderKey);
     widget.appearance.removeListener(_appearanceChanged);
     _saveTimer?.cancel();
+    _controlsTimer?.cancel();
+    _fullscreenHintTimer?.cancel();
+    _toolbarFocus.dispose();
+    _playbackFocus.dispose();
+    if (_displayNeedsRestore || _fullscreenChanging) {
+      // An entry already in flight must finish before restoring the display.
+      unawaited(
+        _displayQueue
+            .then((_) => ReaderDisplay.setFullscreen(false))
+            .catchError((Object error) {
+              debugPrint('Restoring reader display on disposal: $error');
+            }),
+      );
+    }
     for (final subscription in _subscriptions) {
       unawaited(subscription.cancel());
     }
@@ -761,141 +987,312 @@ class _ReaderScreenState extends State<ReaderScreen>
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return PopScope<void>(
-      canPop: _allowPop,
+      canPop: _allowPop && !_fullscreen && !_fullscreenChanging,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) unawaited(_close());
+        if (!didPop) unawaited(_back());
       },
       child: Scaffold(
-        appBar: AppBar(
-          title: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(_book.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-              if (_book.author.isNotEmpty)
-                Text(
-                  _book.author,
-                  style: theme.textTheme.bodySmall,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+        appBar: _fullscreen ? null : _buildToolbar(context),
+        body: Stack(
+          fit: StackFit.expand,
+          children: [
+            Column(
+              children: [
+                if (!_fullscreen && _visibleError != null) _buildError(context),
+                Expanded(
+                  key: const ValueKey('reader-page'),
+                  child: _buildPage(context),
                 ),
-            ],
-          ),
-          actions: [
-            IconButton(
-              tooltip: 'Chapters',
-              onPressed: _chapters.isEmpty ? null : _showChapters,
-              icon: const Icon(Icons.toc),
-            ),
-            IconButton(
-              tooltip: 'Appearance',
-              onPressed: () => showAppearancePanel(context, widget.appearance),
-              icon: const Icon(Icons.text_fields),
-            ),
-            PopupMenuButton<String>(
-              tooltip: 'More reader options',
-              onSelected: (value) {
-                if (value == 'tracks') {
-                  unawaited(_showTracks());
-                } else {
-                  unawaited(_showAlignment());
-                }
-              },
-              itemBuilder: (context) => [
-                PopupMenuItem(
-                  value: 'tracks',
-                  enabled: _hasAudio && !_loading,
-                  child: const Text('Audio tracks'),
-                ),
-                const PopupMenuItem(
-                  value: 'alignment',
-                  child: Text('Alignment details'),
-                ),
+                if (!_fullscreen)
+                  _controlRegion(_playbackFocus, _buildControls(context)),
               ],
             ),
-          ],
-        ),
-        body: Column(
-          children: [
-            if (_error != null)
-              Material(
-                color: theme.colorScheme.errorContainer,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 4, 8),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          _error!,
-                          style: TextStyle(
-                            color: theme.colorScheme.onErrorContainer,
-                          ),
-                        ),
-                      ),
-                      if (_hasAudio && !_loading && !_ready)
-                        TextButton(
-                          onPressed: () => _runAudio(
-                            () => _loadTrack(_track, positionMs: _positionMs),
-                          ),
-                          child: const Text('Retry'),
-                        ),
-                      IconButton(
-                        tooltip: 'Dismiss error',
-                        onPressed: () => setState(() => _error = null),
-                        icon: const Icon(Icons.close),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            Expanded(
-              child: _book.blocks.isEmpty
-                  ? const Center(
-                      child: Text('This book contains no readable text.'),
-                    )
-                  : NotificationListener<ScrollNotification>(
-                      onNotification: (notification) {
-                        if ((notification is UserScrollNotification &&
-                                notification.direction !=
-                                    ScrollDirection.idle) ||
-                            (notification is ScrollStartNotification &&
-                                notification.dragDetails != null)) {
-                          _pauseFollow();
-                        }
-                        return false;
-                      },
-                      child: SelectionArea(
-                        child: ScrollablePositionedList.builder(
-                          itemScrollController: _scrollController,
-                          itemPositionsListener: _positions,
-                          itemCount: _book.blocks.length,
-                          padding: const EdgeInsets.symmetric(vertical: 28),
-                          itemBuilder: (context, index) => Center(
-                            child: ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 820),
-                              child: Padding(
-                                padding: EdgeInsets.symmetric(
-                                  horizontal:
-                                      MediaQuery.sizeOf(context).width < 600
-                                      ? 20
-                                      : 40,
-                                  vertical: 7,
-                                ),
-                                child: _buildBlock(_book.blocks[index]),
+            if (_fullscreen) _buildFullscreenOverlay(context),
+            if (_fullscreen && _fullscreenHint)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Semantics(
+                        liveRegion: true,
+                        child: Material(
+                          elevation: 6,
+                          borderRadius: BorderRadius.circular(12),
+                          color: Theme.of(context).colorScheme.inverseSurface,
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Text(
+                              Platform.isAndroid
+                                  ? 'Tap the page to reveal controls.\n'
+                                        'Press Back to leave fullscreen.'
+                                  : 'Click the page to reveal controls.\n'
+                                        'Press Esc or F11 to leave fullscreen.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onInverseSurface,
                               ),
                             ),
                           ),
                         ),
                       ),
                     ),
-            ),
-            _buildControls(context),
+                  ),
+                ),
+              ),
           ],
         ),
       ),
     );
   }
+
+  PreferredSizeWidget _buildToolbar(BuildContext context) => PreferredSize(
+    preferredSize: Size.fromHeight(
+      Theme.of(context).appBarTheme.toolbarHeight ?? kToolbarHeight,
+    ),
+    child: _controlRegion(
+      _toolbarFocus,
+      AppBar(
+        primary: !_fullscreen,
+        leading: BackButton(onPressed: _back),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(_book.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+            if (_book.author.isNotEmpty)
+              Text(
+                _book.author,
+                style: Theme.of(context).textTheme.bodySmall,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+          ],
+        ),
+        actions: [
+          IconButton(
+            tooltip: 'Chapters',
+            onPressed: _chapters.isEmpty
+                ? null
+                : () => _withControls(_showChapters),
+            icon: const Icon(Icons.toc),
+          ),
+          IconButton(
+            tooltip: 'Appearance',
+            onPressed: () => _withControls(
+              () => showAppearancePanel(context, widget.appearance),
+            ),
+            icon: const Icon(Icons.text_fields),
+          ),
+          PopupMenuButton<String>(
+            tooltip: 'More reader options',
+            onOpened: _holdControls,
+            onCanceled: _releaseControls,
+            onSelected: (value) {
+              _releaseControls();
+              if (value == 'fullscreen') {
+                unawaited(_setFullscreen(!_fullscreen));
+              } else if (value == 'tracks') {
+                unawaited(_withControls(_showTracks));
+              } else {
+                unawaited(_withControls(_showAlignment));
+              }
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: 'fullscreen',
+                enabled: !_fullscreenChanging && !_closing,
+                child: Text(_fullscreen ? 'Exit fullscreen' : 'Fullscreen'),
+              ),
+              PopupMenuItem(
+                value: 'tracks',
+                enabled: _hasAudio && !_loading,
+                child: const Text('Audio tracks'),
+              ),
+              const PopupMenuItem(
+                value: 'alignment',
+                child: Text('Alignment details'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    ),
+  );
+
+  Widget _buildFullscreenOverlay(BuildContext context) => Positioned.fill(
+    child: SafeArea(
+      bottom: false,
+      child: Column(
+        children: [
+          Visibility(
+            visible: _controlsVisible,
+            maintainState: true,
+            child: SizedBox(
+              height:
+                  Theme.of(context).appBarTheme.toolbarHeight ?? kToolbarHeight,
+              child: _buildToolbar(context),
+            ),
+          ),
+          if (_visibleError != null) _buildError(context),
+          Expanded(
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: Visibility(
+                visible: _controlsVisible,
+                maintainState: true,
+                child: _controlRegion(
+                  _playbackFocus,
+                  SingleChildScrollView(child: _buildControls(context)),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  String? get _visibleError => _fullscreenError == null
+      ? _error
+      : _error == null
+      ? _fullscreenError
+      : '$_error\n$_fullscreenError';
+
+  Widget _buildError(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Material(
+      color: colors.errorContainer,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 4, 8),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                _visibleError!,
+                style: TextStyle(color: colors.onErrorContainer),
+              ),
+            ),
+            if (_error != null && _hasAudio && !_loading && !_ready)
+              TextButton(
+                onPressed: () => _runAudio(
+                  () => _loadTrack(_track, positionMs: _positionMs),
+                ),
+                child: const Text('Retry'),
+              ),
+            IconButton(
+              tooltip: 'Dismiss error',
+              onPressed: () => setState(() {
+                _error = null;
+                _fullscreenError = null;
+              }),
+              icon: const Icon(Icons.close),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPage(BuildContext context) => SafeArea(
+    top: _fullscreen,
+    bottom: _fullscreen,
+    left: _fullscreen,
+    right: _fullscreen,
+    child: LayoutBuilder(
+      builder: (context, constraints) {
+        final size = constraints.biggest;
+        if (_viewportSize != size) {
+          _viewportSize = size;
+          if (_follow) _followCue(jump: true);
+        }
+        return Listener(
+          behavior: HitTestBehavior.translucent,
+          onPointerDown: (event) {
+            if (!_fullscreen) return;
+            if (_pagePointer != null) {
+              _pagePointerOrigin = null;
+              return;
+            }
+            _pagePointer = event.pointer;
+            _pagePointerOrigin = event.position;
+            _pagePointerTime = event.timeStamp;
+          },
+          onPointerMove: (event) {
+            final origin = _pagePointerOrigin;
+            if (event.pointer == _pagePointer &&
+                origin != null &&
+                (event.position - origin).distanceSquared > 144) {
+              _pagePointerOrigin = null;
+            }
+          },
+          onPointerUp: (event) {
+            if (event.pointer != _pagePointer) return;
+            final origin = _pagePointerOrigin;
+            final started = _pagePointerTime;
+            _pagePointer = null;
+            _pagePointerOrigin = null;
+            _pagePointerTime = null;
+            if (origin != null &&
+                started != null &&
+                event.timeStamp - started < const Duration(milliseconds: 450) &&
+                (event.position - origin).distanceSquared <= 144) {
+              _revealControls();
+            }
+          },
+          onPointerCancel: (event) {
+            if (event.pointer != _pagePointer) return;
+            _pagePointer = null;
+            _pagePointerOrigin = null;
+            _pagePointerTime = null;
+          },
+          child: _book.blocks.isEmpty
+              ? const Center(
+                  child: Text('This book contains no readable text.'),
+                )
+              : NotificationListener<ScrollNotification>(
+                  onNotification: (notification) {
+                    if ((notification is UserScrollNotification &&
+                            notification.direction != ScrollDirection.idle) ||
+                        (notification is ScrollStartNotification &&
+                            notification.dragDetails != null)) {
+                      _pauseFollow();
+                    }
+                    return false;
+                  },
+                  child: SelectionArea(
+                    onSelectionChanged: (selection) {
+                      _hasSelection = selection?.plainText.isNotEmpty ?? false;
+                      _scheduleControlsHide();
+                    },
+                    child: ScrollablePositionedList.builder(
+                      itemScrollController: _scrollController,
+                      itemPositionsListener: _positions,
+                      itemCount: _book.blocks.length,
+                      padding: const EdgeInsets.symmetric(vertical: 28),
+                      itemBuilder: (context, index) => Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 820),
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: MediaQuery.sizeOf(context).width < 600
+                                  ? 20
+                                  : 40,
+                              vertical: 7,
+                            ),
+                            child: _buildBlock(_book.blocks[index]),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+        );
+      },
+    ),
+  );
 
   Widget _buildBlock(BookBlock block) {
     final theme = Theme.of(context);
@@ -1055,9 +1452,16 @@ class _ReaderScreenState extends State<ReaderScreen>
                   PopupMenuButton<TimelineMode>(
                     tooltip: 'Timeline mode',
                     initialValue: _preferences.timelineMode,
-                    onSelected: (mode) => _updatePreferences(
-                      _preferences.copyWith(timelineMode: mode),
-                    ),
+                    onOpened: _holdControls,
+                    onCanceled: _releaseControls,
+                    onSelected: (mode) {
+                      _releaseControls();
+                      unawaited(
+                        _updatePreferences(
+                          _preferences.copyWith(timelineMode: mode),
+                        ),
+                      );
+                    },
                     itemBuilder: (context) => const [
                       PopupMenuItem(
                         value: TimelineMode.book,
@@ -1200,7 +1604,12 @@ class _ReaderScreenState extends State<ReaderScreen>
                     tooltip: 'Playback speed',
                     initialValue: _speed,
                     enabled: !_loading,
-                    onSelected: _changeSpeed,
+                    onOpened: _holdControls,
+                    onCanceled: _releaseControls,
+                    onSelected: (speed) {
+                      _releaseControls();
+                      unawaited(_changeSpeed(speed));
+                    },
                     itemBuilder: (context) => [
                       for (final speed in [
                         0.5,
@@ -1226,9 +1635,16 @@ class _ReaderScreenState extends State<ReaderScreen>
                 PopupMenuButton<HighlightRangeMode>(
                   tooltip: 'Highlight range',
                   initialValue: _preferences.highlightRange,
-                  onSelected: (mode) => _updatePreferences(
-                    _preferences.copyWith(highlightRange: mode),
-                  ),
+                  onOpened: _holdControls,
+                  onCanceled: _releaseControls,
+                  onSelected: (mode) {
+                    _releaseControls();
+                    unawaited(
+                      _updatePreferences(
+                        _preferences.copyWith(highlightRange: mode),
+                      ),
+                    );
+                  },
                   itemBuilder: (context) => const [
                     PopupMenuItem(
                       value: HighlightRangeMode.word,
