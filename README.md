@@ -24,7 +24,8 @@ Open **Appearance** from the library or reader toolbar. Changes apply immediatel
 
 - **System**, **Light**, or **Dark** theme.
 - System font, PT Serif, PT Sans, or IBM Plex Mono, with a **14–40** font-size range. Bundled fonts include bold and italic variants; ebook emphasis remains intact.
-- Background, underline, or text-color highlighting; palette colors or a custom `#RRGGBB` color. Highlight text is contrast-adjusted when necessary for readability.
+- **Reading width:** **Standard** keeps the existing centered column and margins, **Wide** expands the column, and **Full width** uses the available window width with small edge padding. This applies in both windowed and fullscreen reading; narrow screens retain their existing padding.
+- Background, underline, text-color, or **bold-text** highlighting. Color styles offer presets or a custom `#RRGGBB` color, with contrast adjustment where necessary. Bold changes the spoken text's weight without adding color; existing italics, underlining and heavier weights are preserved.
 - Word, phrase, or sentence highlight range.
 - Whole-book or current-file timeline.
 
@@ -158,6 +159,8 @@ The v0.2.0 native runs additionally exercised live dark mode, serif font/size ch
 Native completion/replay checks on both platforms verified that the completed book clock remains at its final endpoint despite late decoder position resets, and that replay and subsequent cross-file seeking receive position updates normally.
 
 The v0.3.0 native runs exercised fullscreen while narration was playing, text-only rendering, unchanged book viewport during control reveal/hide, mouse/touch auto-hide, dialog hold/release, and manual-scroll/paused-state preservation. Windows checks compared real monitor/window rectangles and styles and verified exact normal-window and maximized restoration. Android checked native system-bar transitions and Back leaving fullscreen before normal reader close. Widget regressions cover display errors, first-Back behavior, stable overlays and accessible-navigation controls. Physical ARM64 devices and monitor/DPI topology changes were not exercised.
+
+The v0.4.0 PC run selected Standard, Wide and Full width through Appearance, verified the original margins could be restored, and checked full-width text in actual fullscreen. It also selected Bold through the UI, verified a visible bold spoken-word span without a color fill, and reopened saved preferences. Changing either setting kept the current word visible and left paused playback unchanged. Regression tests cover narrow-screen fitting, persisted choices, legacy appearance files, ebook formatting and existing heavier font weights.
 
 Windows preparation was also exercised through native EPUB, multi-audio and output-folder dialogs, invoking its bundled worker and importing the result. An Android release APK was separately exercised with the real document provider and observed playing highlighted text after automatic track advancement. Disposable fixtures and UI-driving scripts are not shipped. Permanent tests cover package safety, alignment ambiguities/omissions, Unicode ranges, formatting, contrast, atomic preference persistence, highlight boundaries and whole-book timeline boundaries.
 

@@ -25,6 +25,7 @@ void main() {
           'highlightArgb': 0x00123456,
           'highlightRange': 'paragraph',
           'timelineMode': 'elapsed',
+          'readingWidth': 'future-width',
         });
         expect(settings.fontSize, 40);
         expect(settings.highlightArgb, 0xff123456);
@@ -33,6 +34,7 @@ void main() {
         expect(settings.highlightStyle, HighlightStyle.background);
         expect(settings.highlightRange, HighlightRangeMode.word);
         expect(settings.timelineMode, TimelineMode.book);
+        expect(settings.readingWidth, ReadingWidth.standard);
         for (final value in [null, '19', double.nan, double.infinity]) {
           expect(
             ReaderPreferences.fromJson({'schemaVersion': 1, 'fontSize': value})
@@ -95,13 +97,15 @@ void main() {
             );
             expect(result.letterSpacing, 1.2);
             expect(result.fontSize, 23);
-            final background = style == HighlightStyle.background
-                ? result.backgroundColor!
-                : colors.surface;
-            expect(
-              contrast(result.color!, background),
-              greaterThanOrEqualTo(4.5),
-            );
+            if (style != HighlightStyle.bold) {
+              final background = style == HighlightStyle.background
+                  ? result.backgroundColor!
+                  : colors.surface;
+              expect(
+                contrast(result.color!, background),
+                greaterThanOrEqualTo(4.5),
+              );
+            }
             if (style == HighlightStyle.underline) {
               expect(
                 contrast(result.decorationColor!, colors.surface),
@@ -111,10 +115,47 @@ void main() {
           }
           final plain = ReaderPreferences(highlightStyle: style)
               .applyHighlight(const TextStyle(), colors);
-          expect(plain.fontWeight, isNull);
+          expect(
+            plain.fontWeight,
+            style == HighlightStyle.bold ? FontWeight.bold : null,
+          );
           expect(plain.fontStyle, isNull);
         }
       }
+    });
+
+    test('bold highlighting preserves ebook ink and formatting without adding color', () {
+      const preferences = ReaderPreferences(
+        highlightStyle: HighlightStyle.bold,
+        highlightArgb: 0xffff0000,
+      );
+      const base = TextStyle(
+        color: Colors.blue,
+        fontWeight: FontWeight.normal,
+        fontStyle: FontStyle.italic,
+        decoration: TextDecoration.lineThrough,
+        fontSize: 23,
+      );
+      final result = preferences.applyHighlight(
+        base,
+        const ReaderPreferences().theme(Brightness.light).colorScheme,
+      );
+      expect(result.fontWeight, FontWeight.bold);
+      expect(result.fontStyle, FontStyle.italic);
+      expect(result.decoration, TextDecoration.lineThrough);
+      expect(result.color, Colors.blue);
+      expect(result.backgroundColor, isNull);
+      final painted = base.copyWith(
+        color: null,
+        foreground: Paint()..color = Colors.green,
+        fontWeight: FontWeight.w900,
+      );
+      final paintedResult = preferences.applyHighlight(
+        painted,
+        const ReaderPreferences().theme(Brightness.dark).colorScheme,
+      );
+      expect(paintedResult.foreground, same(painted.foreground));
+      expect(paintedResult.fontWeight, FontWeight.w900);
     });
 
     test('underline adds to existing decorations and handles painted text', () {
@@ -189,6 +230,55 @@ void main() {
         );
       },
     );
+
+    test(
+      'reading width survives reopening and unrelated appearance edits',
+      () async {
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          jsonEncode({'schemaVersion': 1, 'font': 'serif', 'fontSize': 24}),
+        );
+        final controller = await AppearanceController.load(file);
+        addTearDown(controller.dispose);
+        expect(controller.value.readingWidth, ReadingWidth.standard);
+        expect(controller.value.font, ReaderFont.serif);
+        for (final width in [
+          ReadingWidth.wide,
+          ReadingWidth.full,
+          ReadingWidth.standard,
+        ]) {
+          await controller.update(
+            controller.value.copyWith(readingWidth: width),
+          );
+          await controller.update(controller.value.copyWith(fontSize: 26));
+          final restored = await AppearanceController.load(file);
+          expect(restored.value.readingWidth, width);
+          expect(restored.value.font, ReaderFont.serif);
+          expect(restored.value.fontSize, 26);
+          restored.dispose();
+        }
+      },
+    );
+
+    test('saved bold selection is applied after reopening', () async {
+      final controller = await AppearanceController.load(file);
+      addTearDown(controller.dispose);
+      await controller.update(
+        controller.value.copyWith(
+          highlightStyle: HighlightStyle.bold,
+          readingWidth: ReadingWidth.full,
+        ),
+      );
+      final restored = await AppearanceController.load(file);
+      addTearDown(restored.dispose);
+      expect(restored.value.readingWidth, ReadingWidth.full);
+      final style = restored.value.applyHighlight(
+        const TextStyle(fontWeight: FontWeight.normal),
+        restored.value.theme(Brightness.light).colorScheme,
+      );
+      expect(style.fontWeight, FontWeight.bold);
+      expect(style.backgroundColor, isNull);
+    });
 
     test(
       'failed atomic saves preserve old data, surface errors and recover',

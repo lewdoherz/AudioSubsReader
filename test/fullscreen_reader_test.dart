@@ -139,6 +139,58 @@ void main() {
     }
   }
 
+  testWidgets('reading width expands desktop text and fits narrow screens', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1600, 1000);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await withReader(tester, () async {
+      final appearance = tester
+          .widget<ReaderScreen>(find.byType(ReaderScreen))
+          .appearance;
+      final paragraph = find
+          .byWidgetPredicate(
+            (widget) =>
+                widget is Text &&
+                (widget.textSpan?.toPlainText().startsWith('Paragraph 0.') ??
+                    false),
+          )
+          .first;
+      Future<void> choose(ReadingWidth width) async {
+        await tester.runAsync(
+          () =>
+              appearance.update(appearance.value.copyWith(readingWidth: width)),
+        );
+        await tester.pumpAndSettle();
+      }
+
+      final standard = tester.getSize(paragraph);
+      await choose(ReadingWidth.wide);
+      final wide = tester.getSize(paragraph);
+      expect(wide.width, greaterThan(standard.width));
+      expect(wide.height, lessThan(standard.height));
+      await choose(ReadingWidth.full);
+      final full = tester.getSize(paragraph);
+      expect(full.width, greaterThan(wide.width));
+      expect(full.width, 1520);
+      await tester.sendKeyEvent(LogicalKeyboardKey.f11);
+      await tester.pumpAndSettle();
+      expect(tester.getSize(paragraph).width, full.width);
+      await choose(ReadingWidth.standard);
+      expect(tester.getSize(paragraph).width, standard.width);
+
+      tester.view.physicalSize = const Size(360, 800);
+      await tester.pumpAndSettle();
+      for (final width in ReadingWidth.values) {
+        await choose(width);
+        expect(tester.getSize(paragraph).width, 320);
+      }
+      expect(tester.takeException(), isNull);
+    });
+  });
+
   testWidgets(
     'temporary controls leave the fullscreen book viewport unchanged',
     (tester) async {

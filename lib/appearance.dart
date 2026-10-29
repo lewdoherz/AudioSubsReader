@@ -8,7 +8,16 @@ import 'package:flutter/services.dart';
 
 enum ReaderFont { system, serif, sans, mono }
 
-enum HighlightStyle { background, underline, text }
+enum ReadingWidth {
+  standard(BoxConstraints(maxWidth: 820)),
+  wide(BoxConstraints(maxWidth: 1200)),
+  full(BoxConstraints());
+
+  const ReadingWidth(this.constraints);
+  final BoxConstraints constraints;
+}
+
+enum HighlightStyle { background, underline, text, bold }
 
 enum HighlightRangeMode { word, phrase, sentence }
 
@@ -19,6 +28,7 @@ class ReaderPreferences {
   final ThemeMode themeMode;
   final ReaderFont font;
   final double fontSize;
+  final ReadingWidth readingWidth;
   final HighlightStyle highlightStyle;
   final int highlightArgb;
   final HighlightRangeMode highlightRange;
@@ -28,6 +38,7 @@ class ReaderPreferences {
     this.themeMode = ThemeMode.system,
     this.font = ReaderFont.system,
     this.fontSize = 19,
+    this.readingWidth = ReadingWidth.standard,
     this.highlightStyle = HighlightStyle.background,
     this.highlightArgb = 0xff80cbc4,
     this.highlightRange = HighlightRangeMode.word,
@@ -38,6 +49,7 @@ class ReaderPreferences {
     ThemeMode? themeMode,
     ReaderFont? font,
     double? fontSize,
+    ReadingWidth? readingWidth,
     HighlightStyle? highlightStyle,
     int? highlightArgb,
     HighlightRangeMode? highlightRange,
@@ -46,6 +58,7 @@ class ReaderPreferences {
     themeMode: themeMode ?? this.themeMode,
     font: font ?? this.font,
     fontSize: _safeFontSize(fontSize ?? this.fontSize),
+    readingWidth: readingWidth ?? this.readingWidth,
     highlightStyle: highlightStyle ?? this.highlightStyle,
     highlightArgb: _opaque(highlightArgb ?? this.highlightArgb),
     highlightRange: highlightRange ?? this.highlightRange,
@@ -62,6 +75,11 @@ class ReaderPreferences {
       ),
       font: _enumValue(ReaderFont.values, json['font'], ReaderFont.system),
       fontSize: _safeFontSize(json['fontSize']),
+      readingWidth: _enumValue(
+        ReadingWidth.values,
+        json['readingWidth'],
+        ReadingWidth.standard,
+      ),
       highlightStyle: _enumValue(
         HighlightStyle.values,
         json['highlightStyle'],
@@ -86,6 +104,7 @@ class ReaderPreferences {
     'themeMode': themeMode.name,
     'font': font.name,
     'fontSize': _safeFontSize(fontSize),
+    'readingWidth': readingWidth.name,
     'highlightStyle': highlightStyle.name,
     'highlightArgb': _opaque(highlightArgb),
     'highlightRange': highlightRange.name,
@@ -100,6 +119,14 @@ class ReaderPreferences {
   };
 
   TextStyle applyHighlight(TextStyle base, ColorScheme colors) {
+    if (highlightStyle == HighlightStyle.bold) {
+      final weight = base.fontWeight ?? FontWeight.normal;
+      return base.copyWith(
+        fontWeight: weight.value > FontWeight.bold.value
+            ? weight
+            : FontWeight.bold,
+      );
+    }
     final selected = Color(_opaque(highlightArgb));
     final background = highlightStyle == HighlightStyle.background
         ? selected
@@ -107,7 +134,7 @@ class ReaderPreferences {
     final ink = switch (highlightStyle) {
       HighlightStyle.background => _contrastingInk(selected),
       HighlightStyle.text => _readableColor(selected, background),
-      HighlightStyle.underline => _readableColor(
+      _ => _readableColor(
         base.foreground?.color ?? base.color ?? colors.onSurface,
         background,
       ),

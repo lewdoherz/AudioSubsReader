@@ -338,7 +338,11 @@ class _ReaderScreenState extends State<ReaderScreen>
     final next = widget.appearance.value;
     final layoutChanged =
         next.font != _preferences.font ||
-        next.fontSize != _preferences.fontSize;
+        next.fontSize != _preferences.fontSize ||
+        next.readingWidth != _preferences.readingWidth ||
+        (next.highlightStyle != _preferences.highlightStyle &&
+            (next.highlightStyle == HighlightStyle.bold ||
+                _preferences.highlightStyle == HighlightStyle.bold));
     setState(() {
       if (next.timelineMode != _preferences.timelineMode) _dragMs = null;
       _preferences = next;
@@ -1274,7 +1278,7 @@ class _ReaderScreenState extends State<ReaderScreen>
                       padding: const EdgeInsets.symmetric(vertical: 28),
                       itemBuilder: (context, index) => Center(
                         child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 820),
+                          constraints: _preferences.readingWidth.constraints,
                           child: Padding(
                             padding: EdgeInsets.symmetric(
                               horizontal: MediaQuery.sizeOf(context).width < 600

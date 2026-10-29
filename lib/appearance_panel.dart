@@ -226,12 +226,23 @@ class _AppearancePanelState extends State<_AppearancePanel> {
                       _change(preferences.copyWith(fontSize: value)),
                 ),
                 _choices(
+                  'Reading width',
+                  preferences.readingWidth,
+                  const {
+                    ReadingWidth.standard: 'Standard',
+                    ReadingWidth.wide: 'Wide',
+                    ReadingWidth.full: 'Full width',
+                  },
+                  (value) => _change(preferences.copyWith(readingWidth: value)),
+                ),
+                _choices(
                   'Highlight style',
                   preferences.highlightStyle,
                   const {
                     HighlightStyle.background: 'Background',
                     HighlightStyle.underline: 'Underline',
                     HighlightStyle.text: 'Text',
+                    HighlightStyle.bold: 'Bold',
                   },
                   (value) =>
                       _change(preferences.copyWith(highlightStyle: value)),
@@ -247,72 +258,77 @@ class _AppearancePanelState extends State<_AppearancePanel> {
                   (value) =>
                       _change(preferences.copyWith(highlightRange: value)),
                 ),
-                Text('Highlight color', style: theme.textTheme.titleSmall),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    for (final entry in const {
-                      0xff80cbc4: 'Teal',
-                      0xffffd54f: 'Gold',
-                      0xff90caf9: 'Blue',
-                      0xffce93d8: 'Purple',
-                      0xffef9a9a: 'Rose',
-                      0xffa5d6a7: 'Green',
-                    }.entries)
-                      Semantics(
-                        label: '${entry.value} highlight',
-                        selected: preferences.highlightArgb == entry.key,
-                        button: true,
-                        child: Tooltip(
-                          message: entry.value,
-                          child: InkWell(
-                            onTap: () => _change(
-                              preferences.copyWith(highlightArgb: entry.key),
-                            ),
-                            borderRadius: BorderRadius.circular(24),
-                            child: Container(
-                              width: 48,
-                              height: 48,
-                              decoration: BoxDecoration(
-                                color: Color(entry.key),
-                                shape: BoxShape.circle,
-                                border: Border.all(color: colors.onSurface),
+                if (preferences.highlightStyle != HighlightStyle.bold) ...[
+                  Text('Highlight color', style: theme.textTheme.titleSmall),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final entry in const {
+                        0xff80cbc4: 'Teal',
+                        0xffffd54f: 'Gold',
+                        0xff90caf9: 'Blue',
+                        0xffce93d8: 'Purple',
+                        0xffef9a9a: 'Rose',
+                        0xffa5d6a7: 'Green',
+                      }.entries)
+                        Semantics(
+                          label: '${entry.value} highlight',
+                          selected: preferences.highlightArgb == entry.key,
+                          button: true,
+                          child: Tooltip(
+                            message: entry.value,
+                            child: InkWell(
+                              onTap: () => _change(
+                                preferences.copyWith(highlightArgb: entry.key),
                               ),
-                              child: preferences.highlightArgb == entry.key
-                                  ? const Icon(Icons.check, color: Colors.black)
-                                  : null,
+                              borderRadius: BorderRadius.circular(24),
+                              child: Container(
+                                width: 48,
+                                height: 48,
+                                decoration: BoxDecoration(
+                                  color: Color(entry.key),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: colors.onSurface),
+                                ),
+                                child: preferences.highlightArgb == entry.key
+                                    ? const Icon(
+                                        Icons.check,
+                                        color: Colors.black,
+                                      )
+                                    : null,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: _hex,
-                  autocorrect: false,
-                  enableSuggestions: false,
-                  textCapitalization: TextCapitalization.characters,
-                  maxLength: 7,
-                  decoration: InputDecoration(
-                    labelText: 'Custom #RRGGBB',
-                    errorText: _colorError,
-                    counterText: '',
-                    suffixIcon: IconButton(
-                      tooltip: 'Apply custom color',
-                      onPressed: _applyCustomColor,
-                      icon: const Icon(Icons.check),
-                    ),
+                    ],
                   ),
-                  onSubmitted: (_) => _applyCustomColor(),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Text and underline colors adjust for readable contrast.',
-                  style: theme.textTheme.bodySmall,
-                ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: _hex,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    textCapitalization: TextCapitalization.characters,
+                    maxLength: 7,
+                    decoration: InputDecoration(
+                      labelText: 'Custom #RRGGBB',
+                      errorText: _colorError,
+                      counterText: '',
+                      suffixIcon: IconButton(
+                        tooltip: 'Apply custom color',
+                        onPressed: _applyCustomColor,
+                        icon: const Icon(Icons.check),
+                      ),
+                    ),
+                    onSubmitted: (_) => _applyCustomColor(),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Text and underline colors adjust for readable contrast.',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ],
                 const SizedBox(height: 18),
                 Container(
                   padding: const EdgeInsets.all(16),
@@ -329,11 +345,7 @@ class _AppearancePanelState extends State<_AppearancePanel> {
                         TextSpan(
                           text: 'Follow every word',
                           style: preferences.applyHighlight(
-                            preview.copyWith(
-                              fontWeight: FontWeight.bold,
-                              fontStyle: FontStyle.italic,
-                              decoration: TextDecoration.underline,
-                            ),
+                            preview.copyWith(fontStyle: FontStyle.italic),
                             colors,
                           ),
                         ),
