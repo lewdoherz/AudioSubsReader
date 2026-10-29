@@ -242,10 +242,17 @@ class _AppearancePanelState extends State<_AppearancePanel> {
                     HighlightStyle.background: 'Background',
                     HighlightStyle.underline: 'Underline',
                     HighlightStyle.text: 'Text',
-                    HighlightStyle.bold: 'Bold',
+                    HighlightStyle.none: 'No color',
                   },
                   (value) =>
                       _change(preferences.copyWith(highlightStyle: value)),
+                ),
+                SwitchListTile.adaptive(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Bold spoken text'),
+                  value: preferences.boldHighlight,
+                  onChanged: (value) =>
+                      _change(preferences.copyWith(boldHighlight: value)),
                 ),
                 _choices(
                   'Highlight range',
@@ -258,7 +265,7 @@ class _AppearancePanelState extends State<_AppearancePanel> {
                   (value) =>
                       _change(preferences.copyWith(highlightRange: value)),
                 ),
-                if (preferences.highlightStyle != HighlightStyle.bold) ...[
+                if (preferences.highlightStyle != HighlightStyle.none) ...[
                   Text('Highlight color', style: theme.textTheme.titleSmall),
                   const SizedBox(height: 8),
                   Wrap(

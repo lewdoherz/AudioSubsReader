@@ -97,7 +97,7 @@ void main() {
             );
             expect(result.letterSpacing, 1.2);
             expect(result.fontSize, 23);
-            if (style != HighlightStyle.bold) {
+            if (style != HighlightStyle.none) {
               final background = style == HighlightStyle.background
                   ? result.backgroundColor!
                   : colors.surface;
@@ -115,10 +115,7 @@ void main() {
           }
           final plain = ReaderPreferences(highlightStyle: style)
               .applyHighlight(const TextStyle(), colors);
-          expect(
-            plain.fontWeight,
-            style == HighlightStyle.bold ? FontWeight.bold : null,
-          );
+          expect(plain.fontWeight, isNull);
           expect(plain.fontStyle, isNull);
         }
       }
@@ -126,7 +123,8 @@ void main() {
 
     test('bold highlighting preserves ebook ink and formatting without adding color', () {
       const preferences = ReaderPreferences(
-        highlightStyle: HighlightStyle.bold,
+        highlightStyle: HighlightStyle.none,
+        boldHighlight: true,
         highlightArgb: 0xffff0000,
       );
       const base = TextStyle(
@@ -157,6 +155,93 @@ void main() {
       expect(paintedResult.foreground, same(painted.foreground));
       expect(paintedResult.fontWeight, FontWeight.w900);
     });
+
+    test(
+      'bold combines with every color style without losing ebook emphasis',
+      () {
+        for (final brightness in Brightness.values) {
+          final colors = const ReaderPreferences()
+              .theme(brightness)
+              .colorScheme;
+          for (final mode in [
+            HighlightStyle.background,
+            HighlightStyle.underline,
+            HighlightStyle.text,
+          ]) {
+            final preferences = ReaderPreferences(
+              highlightStyle: mode,
+              boldHighlight: true,
+              highlightArgb: 0xffe91e63,
+            );
+            const base = TextStyle(
+              fontStyle: FontStyle.italic,
+              decoration: TextDecoration.lineThrough,
+            );
+            final result = preferences.applyHighlight(base, colors);
+            expect(result.fontWeight, FontWeight.bold);
+            expect(result.fontStyle, FontStyle.italic);
+            expect(
+              result.decoration!.contains(TextDecoration.lineThrough),
+              isTrue,
+            );
+            if (mode == HighlightStyle.background) {
+              expect(result.backgroundColor, const Color(0xffe91e63));
+              expect(
+                contrast(result.color!, result.backgroundColor!),
+                greaterThanOrEqualTo(4.5),
+              );
+            } else if (mode == HighlightStyle.underline) {
+              expect(
+                result.decoration!.contains(TextDecoration.underline),
+                isTrue,
+              );
+              expect(
+                contrast(result.decorationColor!, colors.surface),
+                greaterThanOrEqualTo(4.5),
+              );
+            } else {
+              expect(
+                contrast(result.color!, colors.surface),
+                greaterThanOrEqualTo(4.5),
+              );
+            }
+            final normal = preferences
+                .copyWith(boldHighlight: false)
+                .applyHighlight(base, colors);
+            expect(normal.fontWeight, isNull);
+            expect(normal.backgroundColor, result.backgroundColor);
+            expect(normal.color, result.color);
+            expect(normal.decoration, result.decoration);
+          }
+        }
+      },
+    );
+
+    test(
+      'legacy bold-only preferences migrate without adding a color fill',
+      () {
+        final migrated = ReaderPreferences.fromJson({
+          'schemaVersion': 1,
+          'highlightStyle': 'bold',
+          'highlightArgb': 0xffff0000,
+          'fontSize': 26,
+        });
+        expect(migrated.highlightStyle, HighlightStyle.none);
+        expect(migrated.boldHighlight, isTrue);
+        expect(migrated.fontSize, 26);
+        final result = migrated.applyHighlight(
+          const TextStyle(color: Colors.blue),
+          migrated.theme(Brightness.light).colorScheme,
+        );
+        expect(result.fontWeight, FontWeight.bold);
+        expect(result.color, Colors.blue);
+        expect(result.backgroundColor, isNull);
+        final reopened = ReaderPreferences.fromJson(migrated.toJson());
+        expect(reopened.boldHighlight, isTrue);
+        expect(reopened.highlightStyle, HighlightStyle.none);
+        expect(reopened.toJson()['highlightStyle'], 'none');
+      },
+    );
 
     test('underline adds to existing decorations and handles painted text', () {
       final base = TextStyle(
@@ -265,7 +350,8 @@ void main() {
       addTearDown(controller.dispose);
       await controller.update(
         controller.value.copyWith(
-          highlightStyle: HighlightStyle.bold,
+          highlightStyle: HighlightStyle.background,
+          boldHighlight: true,
           readingWidth: ReadingWidth.full,
         ),
       );
@@ -277,7 +363,7 @@ void main() {
         restored.value.theme(Brightness.light).colorScheme,
       );
       expect(style.fontWeight, FontWeight.bold);
-      expect(style.backgroundColor, isNull);
+      expect(style.backgroundColor, isNotNull);
     });
 
     test(

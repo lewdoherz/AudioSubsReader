@@ -340,9 +340,9 @@ class _ReaderScreenState extends State<ReaderScreen>
         next.font != _preferences.font ||
         next.fontSize != _preferences.fontSize ||
         next.readingWidth != _preferences.readingWidth ||
-        (next.highlightStyle != _preferences.highlightStyle &&
-            (next.highlightStyle == HighlightStyle.bold ||
-                _preferences.highlightStyle == HighlightStyle.bold));
+        next.boldHighlight != _preferences.boldHighlight ||
+        (next.highlightRange != _preferences.highlightRange &&
+            next.boldHighlight);
     setState(() {
       if (next.timelineMode != _preferences.timelineMode) _dragMs = null;
       _preferences = next;

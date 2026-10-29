@@ -17,7 +17,7 @@ enum ReadingWidth {
   final BoxConstraints constraints;
 }
 
-enum HighlightStyle { background, underline, text, bold }
+enum HighlightStyle { background, underline, text, none }
 
 enum HighlightRangeMode { word, phrase, sentence }
 
@@ -30,6 +30,7 @@ class ReaderPreferences {
   final double fontSize;
   final ReadingWidth readingWidth;
   final HighlightStyle highlightStyle;
+  final bool boldHighlight;
   final int highlightArgb;
   final HighlightRangeMode highlightRange;
   final TimelineMode timelineMode;
@@ -40,6 +41,7 @@ class ReaderPreferences {
     this.fontSize = 19,
     this.readingWidth = ReadingWidth.standard,
     this.highlightStyle = HighlightStyle.background,
+    this.boldHighlight = false,
     this.highlightArgb = 0xff80cbc4,
     this.highlightRange = HighlightRangeMode.word,
     this.timelineMode = TimelineMode.book,
@@ -51,6 +53,7 @@ class ReaderPreferences {
     double? fontSize,
     ReadingWidth? readingWidth,
     HighlightStyle? highlightStyle,
+    bool? boldHighlight,
     int? highlightArgb,
     HighlightRangeMode? highlightRange,
     TimelineMode? timelineMode,
@@ -60,6 +63,7 @@ class ReaderPreferences {
     fontSize: _safeFontSize(fontSize ?? this.fontSize),
     readingWidth: readingWidth ?? this.readingWidth,
     highlightStyle: highlightStyle ?? this.highlightStyle,
+    boldHighlight: boldHighlight ?? this.boldHighlight,
     highlightArgb: _opaque(highlightArgb ?? this.highlightArgb),
     highlightRange: highlightRange ?? this.highlightRange,
     timelineMode: timelineMode ?? this.timelineMode,
@@ -67,6 +71,7 @@ class ReaderPreferences {
 
   factory ReaderPreferences.fromJson(Map<String, dynamic> json) {
     if (json['schemaVersion'] != 1) return const ReaderPreferences();
+    final legacyBold = json['highlightStyle'] == 'bold';
     return ReaderPreferences(
       themeMode: _enumValue(
         ThemeMode.values,
@@ -80,11 +85,16 @@ class ReaderPreferences {
         json['readingWidth'],
         ReadingWidth.standard,
       ),
-      highlightStyle: _enumValue(
-        HighlightStyle.values,
-        json['highlightStyle'],
-        HighlightStyle.background,
-      ),
+      highlightStyle: legacyBold
+          ? HighlightStyle.none
+          : _enumValue(
+              HighlightStyle.values,
+              json['highlightStyle'],
+              HighlightStyle.background,
+            ),
+      boldHighlight: json['boldHighlight'] is bool
+          ? json['boldHighlight'] as bool
+          : legacyBold,
       highlightArgb: _opaque(json['highlightArgb']),
       highlightRange: _enumValue(
         HighlightRangeMode.values,
@@ -106,6 +116,7 @@ class ReaderPreferences {
     'fontSize': _safeFontSize(fontSize),
     'readingWidth': readingWidth.name,
     'highlightStyle': highlightStyle.name,
+    'boldHighlight': boldHighlight,
     'highlightArgb': _opaque(highlightArgb),
     'highlightRange': highlightRange.name,
     'timelineMode': timelineMode.name,
@@ -119,13 +130,15 @@ class ReaderPreferences {
   };
 
   TextStyle applyHighlight(TextStyle base, ColorScheme colors) {
-    if (highlightStyle == HighlightStyle.bold) {
-      final weight = base.fontWeight ?? FontWeight.normal;
-      return base.copyWith(
-        fontWeight: weight.value > FontWeight.bold.value
-            ? weight
-            : FontWeight.bold,
-      );
+    final weight = base.fontWeight ?? FontWeight.normal;
+    final highlightedWeight =
+        boldHighlight && weight.value < FontWeight.bold.value
+        ? FontWeight.bold
+        : base.fontWeight;
+    if (highlightStyle == HighlightStyle.none) {
+      return highlightedWeight == base.fontWeight
+          ? base
+          : base.copyWith(fontWeight: highlightedWeight);
     }
     final selected = Color(_opaque(highlightArgb));
     final background = highlightStyle == HighlightStyle.background
@@ -146,6 +159,7 @@ class ReaderPreferences {
           ])
         : base.decoration;
     return base.copyWith(
+      fontWeight: highlightedWeight,
       color: base.foreground == null ? ink : null,
       foreground: base.foreground == null ? null : (Paint()..color = ink),
       backgroundColor:
